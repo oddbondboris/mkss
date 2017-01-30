@@ -1,0 +1,27 @@
+#!/bin/bash
+if [ ! -f "$*" ]
+then echo "need a valid file"
+    exit
+fi
+vidlen=$(mediainfo --Output="Video;%Duration%" "$*"|cut -d'.' -f1)
+echo $vidlen
+vidlen=$(($vidlen/1000))
+#vidlen=6840
+STARTTIME=1000
+SHOTS=10
+ENDTIME=$vidlen
+INTERVAL=$(((($vidlen-1000)/$SHOTS)+1))
+base=$(echo "$*" |sed 's/\(.*\/\|^[^\.\/]\)\(.*\)\(\.[^\.]*\)/\2/')
+echo "creating png screns with filename $base"
+for time in `seq $STARTTIME $INTERVAL $ENDTIME`
+do  ffmpeg -ss $time -i "$*" -t 10 -q:v 2 -vf select="eq(pict_type\,PICT_TYPE_I)" -vsync 0 "$base-$time-I.png" -loglevel 24&
+#    ffmpeg -ss $time -i "$*" -t 10 -q:v 2 -vf select="eq(pict_type\,PICT_TYPE_B)" -vsync 0 "$base-$time-B.png" -loglevel 24&
+done
+wait
+echo "converting screens"
+for time in `seq $STARTTIME $INTERVAL $ENDTIME`
+do  convert "$base-$time-I.png" "$base-$time-I.png"&
+    filelist="$filelist $base-$time-I.png"
+done
+wait
+ptpimgup.py $filelist

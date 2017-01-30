@@ -1,0 +1,49 @@
+#!/bin/bash
+if [ ! -f "$*" ]
+then echo "need a valid file"
+    exit
+fi
+SHOTS=10
+STARTTIME=1000
+IFSOLD=$IFS
+vidinfo=$(mediainfo --Output="Video;%Duration%,%DisplayAspectRatio/String%,%Width%,%Height%,|" "$*") 
+#vidlen=$(mediainfo --Output="Video;%Duration%" "$*"|cut -d'.' -f1)
+
+vidlen=$(echo "$vidinfo"|cut -d',' -f1|cut -d'.' -f1)
+vidrat=$(echo "$vidinfo"|cut -d',' -f2)
+vidwidthfac=$(echo "$vidrat"|cut -d':' -f1)
+vidheightfac=$(echo "$vidrat"|cut -d':' -f2)
+vidwidth=$(echo "$vidinfo"|cut -d',' -f3)
+vidheight=$(echo "$vidinfo"|cut -d',' -f4)
+realvidwidth=$((($vidheight*$vidwidthfac)/$vidheightfac))
+if [ $realvidwidth -ne $vidwidth ]
+then echo "aspect not the same scaling screenshots"
+    SHOTS=1
+    STARTTIME=$(($vidlen/3000))
+fi
+echo $vidlen,$vidrat,$vidwidth,$vidheight,$realvidwidth
+#exit
+vidlen=$(($vidlen/1000))
+#vidlen=6840
+ENDTIME=$vidlen
+INTERVAL=$(((($vidlen-$STARTTIME)/$SHOTS)+1))
+base=$(echo "$*" |sed 's/\(.*\/\|^[^\.\/]\)\(.*\)\(\.[^\.]*\)/\2/')
+echo "creating png screens with filename $base"
+for time in `seq $STARTTIME $INTERVAL $ENDTIME`
+do  if [ $realvidwidth -eq $vidwidth ]
+    then ffmpeg -ss $time -i "$*" -t 10 -q:v 2 -vf select="eq(pict_type\,PICT_TYPE_I)" -vsync 0 "$base-$time-I.png" -loglevel 24&
+    else
+        ffmpeg -ss $time -i "$*" -t 10 -q:v 2 -s "$realvidwidth"x"$vidheight" -vf select="eq(pict_type\,PICT_TYPE_I)" -vsync 0 "$base-$time-I.png" -loglevel 24&
+    fi
+#    ffmpeg -ss $time -i "$*" -t 10 -q:v 2 -vf select="eq(pict_type\,PICT_TYPE_B)" -vsync 0 "$base-$time-B.png" -loglevel 24&
+done
+wait
+echo "converting screens"
+for time in `seq $STARTTIME $INTERVAL $ENDTIME`
+do  convert "$base-$time-I.png" "$base-$time-I.png"&
+    filelist="$filelist $base-$time-I.png"
+done
+wait
+echo $filelist
+ptpimgup.py $filelist
+IFS=$IFSOLD
